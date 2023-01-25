@@ -1,0 +1,17 @@
+[package]
+name = "archiv"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "1"
+zstd = "0.12"
+
+clap = { version = "4.1", optional = true }
+
+[features]
+"bin" = ["clap"]
+
+[[bin]]
+name = "archiv"
+required-features = ["bin"]
