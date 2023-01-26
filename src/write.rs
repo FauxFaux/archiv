@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use crate::error::{Error, Result};
-use crate::{FOOTER, HEADER, HEADER_LEN};
+use crate::header::{footer, header, Kinds, GLOBAL_MARKER_LEN};
 
 pub struct WriteOptions {
     level: i32,
@@ -40,14 +40,14 @@ impl<W: Write> StreamCompress<W> {
                 .checked_add(u64::try_from(slice.len()).map_err(|_| Error::LengthOverflow)?)
                 .ok_or(Error::LengthOverflow)?;
         }
-        self.inner.write_all(&HEADER)?;
+        self.inner.write_all(&len.to_ne_bytes())?;
         for slice in item {
             self.inner.write_all(slice)?;
         }
         let start = self.off;
         self.off = self
             .off
-            .checked_add(HEADER_LEN + len)
+            .checked_add(GLOBAL_MARKER_LEN + len)
             .ok_or(Error::LengthOverflow)?;
         Ok(start)
     }
@@ -57,7 +57,7 @@ impl<W: Write> StreamCompress<W> {
     }
 
     pub fn finish(mut self) -> Result<W> {
-        self.inner.write_all(&FOOTER)?;
+        self.inner.write_all(&footer())?;
         let mut w = self.inner.finish()?;
         w.flush()?;
         Ok(w)
@@ -80,7 +80,7 @@ impl<W: Write> ItemCompress<W> {
         let start = self.off;
         self.off = self
             .off
-            .checked_add(HEADER_LEN + new_len)
+            .checked_add(GLOBAL_MARKER_LEN + new_len)
             .ok_or(Error::LengthOverflow)?;
         Ok(start)
     }
@@ -91,27 +91,26 @@ impl<W: Write> ItemCompress<W> {
 
     pub fn finish(self) -> Result<W> {
         let mut w = self.inner;
-        w.write_all(&FOOTER)?;
+        w.write_all(&footer())?;
         w.flush()?;
         Ok(w)
     }
 }
 
 impl WriteOptions {
-    pub fn stream_compress<W: Write>(self, inner: W) -> Result<StreamCompress<W>> {
-        let mut inner = zstd::Encoder::new(inner, self.level)?;
-        inner.write_all(&HEADER)?;
-
+    pub fn stream_compress<W: Write>(self, mut inner: W) -> Result<StreamCompress<W>> {
+        inner.write_all(&header(Kinds::StreamCompressed))?;
+        let inner = zstd::Encoder::new(inner, self.level)?;
         Ok(StreamCompress {
-            off: HEADER_LEN,
+            off: GLOBAL_MARKER_LEN,
             inner,
         })
     }
 
     pub fn item_compress<W: Write>(self, mut inner: W) -> Result<ItemCompress<W>> {
-        inner.write_all(&HEADER)?;
+        inner.write_all(&header(Kinds::ItemCompressed))?;
         Ok(ItemCompress {
-            off: HEADER_LEN,
+            off: GLOBAL_MARKER_LEN,
             level: self.level,
             inner,
         })
