@@ -13,7 +13,7 @@ impl Default for WriteOptions {
     }
 }
 
-pub struct StreamCompress<W: Write> {
+pub struct Plain<W: Write> {
     off: u64,
     inner: zstd::Encoder<'static, W>,
 }
@@ -24,7 +24,7 @@ pub struct ItemCompress<W> {
     inner: W,
 }
 
-impl<W: Write> StreamCompress<W> {
+impl<W: Write> Plain<W> {
     pub fn write_item(&mut self, item: &[u8]) -> Result<u64> {
         let len = u64::try_from(item.len()).map_err(|_| Error::LengthOverflow)?;
         self.inner.write_all(&len.to_ne_bytes())?;
@@ -98,10 +98,10 @@ impl<W: Write> ItemCompress<W> {
 }
 
 impl WriteOptions {
-    pub fn stream_compress<W: Write>(self, mut inner: W) -> Result<StreamCompress<W>> {
-        inner.write_all(&header(Kinds::StreamCompressed))?;
-        let inner = zstd::Encoder::new(inner, self.level)?;
-        Ok(StreamCompress {
+    pub fn stream_compress<W: Write>(self, inner: W) -> Result<Plain<W>> {
+        let mut inner = zstd::Encoder::new(inner, self.level)?;
+        inner.write_all(&header(Kinds::Plain))?;
+        Ok(Plain {
             off: GLOBAL_MARKER_LEN,
             inner,
         })

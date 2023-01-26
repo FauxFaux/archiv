@@ -1,15 +1,17 @@
 use crate::error::{Error, Result};
 
-//                      (all other values reserved)
-//                           Kinds enum   ----v
-const HEADER_TEMPLATE: [u8; 8] = *b"arch\0\0\0\0";
+//                          (all other values reserved)
+//                                Kinds enum   ----v
+pub const HEADER_TEMPLATE: [u8; 8] = *b"\x29\xb6arc\0\0\0";
 const FOOTER_TEMPLATE: [u8; 8] = u64::to_ne_bytes(0xffff_fff0);
 pub const GLOBAL_MARKER_LEN: u64 = 8;
+
+pub const ZSTD_MAGIC: [u8; 4] = *b"\x28\xb5\x2f\xfd";
 
 #[repr(u8)]
 #[derive(Copy, Clone)]
 pub enum Kinds {
-    StreamCompressed = 0,
+    Plain = 0,
     ItemCompressed = 1,
 }
 
@@ -25,7 +27,7 @@ pub fn parse_header(buf: &[u8; 8]) -> Result<Kinds> {
     }
 
     Ok(match buf[7] {
-        0 => Kinds::StreamCompressed,
+        0 => Kinds::Plain,
         1 => Kinds::ItemCompressed,
         _ => return Err(Error::MagicUnrecognised),
     })

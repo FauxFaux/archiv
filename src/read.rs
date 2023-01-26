@@ -1,7 +1,8 @@
+use std::io;
 use std::io::{BufRead, Read};
 
 use crate::error::{Error, Result};
-use crate::header::{parse_header, Kinds};
+use crate::header::{parse_header, Kinds, HEADER_TEMPLATE, ZSTD_MAGIC};
 
 pub struct ReadOptions {
     max_item_size: u64,
@@ -20,8 +21,8 @@ pub trait Expand {
     fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>>;
 }
 
-pub struct StreamExpand<R: BufRead> {
-    inner: zstd::Decoder<'static, R>,
+pub struct StreamExpand<R> {
+    inner: R,
     max_item_size: u64,
 }
 
@@ -30,7 +31,7 @@ pub struct ItemExpand<R> {
     max_item_size: u64,
 }
 
-impl<R: BufRead> Expand for StreamExpand<R> {
+impl<R: Read> Expand for StreamExpand<R> {
     fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>> {
         let mut buf = [0u8; 8];
         self.inner.read_exact(&mut buf)?;
@@ -66,13 +67,22 @@ impl<R: Read> Expand for ItemExpand<R> {
 
 impl ReadOptions {
     pub fn stream<R: BufRead + 'static>(self, mut inner: R) -> Result<Box<dyn Expand>> {
+        let hints = inner.fill_buf()?;
+        assert_eq!(0x28, ZSTD_MAGIC[0]);
+        assert_eq!(0x29, HEADER_TEMPLATE[0]);
+        match hints[0] {
+            0x28 => return self.stream(io::BufReader::new(zstd::Decoder::new(inner)?)),
+            0x29 => (),
+            _ => return Err(Error::MagicMissing),
+        }
+
         let mut buf = [0u8; 8];
         inner.read_exact(&mut buf)?;
         let max_item_size = self.max_item_size;
         let kind = parse_header(&buf)?;
         Ok(match kind {
-            Kinds::StreamCompressed => Box::new(StreamExpand {
-                inner: zstd::Decoder::new(inner)?,
+            Kinds::Plain => Box::new(StreamExpand {
+                inner,
                 max_item_size,
             }),
             Kinds::ItemCompressed => Box::new(ItemExpand {
