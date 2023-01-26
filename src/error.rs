@@ -12,6 +12,8 @@ pub enum Error {
 
     #[error("an item exceeded the specified limits")]
     InvalidItem,
+    #[error("invalid use of the API")]
+    ApiMisuse,
 
     #[error("overflow during a 64-bit math operation (unlikely)")]
     LengthOverflow,

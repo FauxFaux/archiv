@@ -24,6 +24,7 @@ pub trait Expand {
 pub struct StreamExpand<R> {
     inner: R,
     max_item_size: u64,
+    poisoned: bool,
 }
 
 pub struct ItemExpand<R> {
@@ -33,6 +34,10 @@ pub struct ItemExpand<R> {
 
 impl<R: Read> Expand for StreamExpand<R> {
     fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>> {
+        // this could be a panic, we don't panic in drop to assist with unwinding
+        if self.poisoned {
+            return Err(Error::ApiMisuse);
+        }
         let mut buf = [0u8; 8];
         self.inner.read_exact(&mut buf)?;
         let len = u64::from_ne_bytes(buf);
@@ -43,7 +48,36 @@ impl<R: Read> Expand for StreamExpand<R> {
             return Err(Error::InvalidItem);
         }
 
-        Ok(Some(Box::new((&mut self.inner).take(len))))
+        Ok(Some(Box::new(StreamExpandItem {
+            inner: self,
+            limit: len,
+        })))
+    }
+}
+
+// Take<> but with error handling
+struct StreamExpandItem<'i, R> {
+    inner: &'i mut StreamExpand<R>,
+    limit: u64,
+}
+
+impl<R: Read> Read for StreamExpandItem<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.limit == 0 {
+            return Ok(0);
+        }
+        let max = self.limit.min(buf.len() as u64) as usize;
+        let n = self.inner.inner.read(&mut buf[..max])?;
+        self.limit -= n as u64;
+        Ok(n)
+    }
+}
+
+impl<R> Drop for StreamExpandItem<'_, R> {
+    fn drop(&mut self) {
+        if self.limit != 0 {
+            self.inner.poisoned = true;
+        }
     }
 }
 
@@ -87,6 +121,7 @@ impl ReadOptions {
             Kinds::Plain => Box::new(StreamExpand {
                 inner,
                 max_item_size,
+                poisoned: false,
             }),
             Kinds::ItemCompressed => Box::new(ItemExpand {
                 inner,

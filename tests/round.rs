@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Read;
 
-use archiv::{Encoder, ReadOptions, WriteOptions};
+use archiv::{Encoder, Error, ReadOptions, WriteOptions};
 
 fn test_round_trip<W: AsRef<[u8]> + 'static>(
     mut archiv: impl Encoder<W>,
@@ -50,5 +50,19 @@ fn round_trip_items() -> anyhow::Result<()> {
         &["hello world"],
     )?;
     test_round_trip(WriteOptions::default().item_compress(Vec::new())?, &[])?;
+    Ok(())
+}
+
+#[test]
+fn api_misuse() -> anyhow::Result<()> {
+    let mut archiv = WriteOptions::default().stream_compress(Vec::new())?;
+    archiv.write_item(b"hello world")?;
+    let out = archiv.finish()?;
+    let mut archiv = ReadOptions::default().stream(io::Cursor::new(out))?;
+    let mut item = archiv.next_item()?.expect(">1 items present");
+    assert_eq!(1, item.read(&mut [0u8])?);
+    // this is illegal, it hasn't been fully read:
+    drop(item);
+    assert!(matches!(archiv.next_item(), Err(Error::ApiMisuse)));
     Ok(())
 }
