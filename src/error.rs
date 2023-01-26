@@ -1,4 +1,3 @@
-use std::backtrace::Backtrace;
 use std::collections::TryReserveError;
 use std::io;
 
@@ -20,7 +19,6 @@ pub enum Error {
     Io {
         #[from]
         source: io::Error,
-        backtrace: Backtrace,
     },
     #[error("underlying allocator error")]
     TryReserve {
