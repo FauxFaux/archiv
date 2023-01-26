@@ -71,7 +71,10 @@ impl ReadOptions {
         assert_eq!(0x28, ZSTD_MAGIC[0]);
         assert_eq!(0x29, HEADER_TEMPLATE[0]);
         match hints[0] {
-            0x28 => return self.stream(io::BufReader::new(zstd::Decoder::new(inner)?)),
+            0x28 => {
+                let inner = io::BufReader::new(zstd::Decoder::new(inner)?);
+                return self.stream(Box::new(inner) as Box<dyn BufRead>);
+            }
             0x29 => (),
             _ => return Err(Error::MagicMissing),
         }

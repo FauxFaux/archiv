@@ -13,6 +13,11 @@ impl Default for WriteOptions {
     }
 }
 
+pub trait Encoder<W> {
+    fn write_item(&mut self, item: &[u8]) -> Result<u64>;
+    fn finish(self) -> Result<W>;
+}
+
 pub struct Plain<W: Write> {
     off: u64,
     inner: zstd::Encoder<'static, W>,
@@ -24,8 +29,8 @@ pub struct ItemCompress<W> {
     inner: W,
 }
 
-impl<W: Write> Plain<W> {
-    pub fn write_item(&mut self, item: &[u8]) -> Result<u64> {
+impl<W: Write> Encoder<W> for Plain<W> {
+    fn write_item(&mut self, item: &[u8]) -> Result<u64> {
         let len = u64::try_from(item.len()).map_err(|_| Error::LengthOverflow)?;
         self.inner.write_all(&len.to_ne_bytes())?;
         self.inner.write_all(item)?;
@@ -33,6 +38,15 @@ impl<W: Write> Plain<W> {
         Ok(self.off)
     }
 
+    fn finish(mut self) -> Result<W> {
+        self.inner.write_all(&footer())?;
+        let mut w = self.inner.finish()?;
+        w.flush()?;
+        Ok(w)
+    }
+}
+
+impl<W: Write> Plain<W> {
     pub fn write_item_vectored(&mut self, item: &[&[u8]]) -> Result<u64> {
         let mut len: u64 = 0;
         for slice in item {
@@ -55,17 +69,10 @@ impl<W: Write> Plain<W> {
     pub fn get_mut(&mut self) -> &mut W {
         self.inner.get_mut()
     }
-
-    pub fn finish(mut self) -> Result<W> {
-        self.inner.write_all(&footer())?;
-        let mut w = self.inner.finish()?;
-        w.flush()?;
-        Ok(w)
-    }
 }
 
-impl<W: Write> ItemCompress<W> {
-    pub fn write_item(&mut self, item: &[u8]) -> Result<u64> {
+impl<W: Write> Encoder<W> for ItemCompress<W> {
+    fn write_item(&mut self, item: &[u8]) -> Result<u64> {
         let original_len = u64::try_from(item.len()).map_err(|_| Error::LengthOverflow)?;
         let mut buf = Vec::with_capacity(item.len() / 4 + 30);
         let mut writer = zstd::Encoder::new(&mut buf, self.level)?;
@@ -85,15 +92,17 @@ impl<W: Write> ItemCompress<W> {
         Ok(start)
     }
 
-    pub fn get_mut(&mut self) -> &mut W {
-        &mut self.inner
-    }
-
-    pub fn finish(self) -> Result<W> {
+    fn finish(self) -> Result<W> {
         let mut w = self.inner;
         w.write_all(&footer())?;
         w.flush()?;
         Ok(w)
+    }
+}
+
+impl<W: Write> ItemCompress<W> {
+    pub fn get_mut(&mut self) -> &mut W {
+        &mut self.inner
     }
 }
 

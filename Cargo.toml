@@ -7,11 +7,5 @@ edition = "2021"
 thiserror = "1"
 zstd = "0.12"
 
-clap = { version = "4.1", optional = true }
-
-[features]
-"bin" = ["clap"]
-
-[[bin]]
-name = "archiv"
-required-features = ["bin"]
+[dev-dependencies]
+anyhow = "1"
