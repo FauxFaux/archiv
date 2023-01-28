@@ -1,11 +1,14 @@
 use std::io;
 use std::io::{BufRead, Read};
+use zstd::dict::DecoderDictionary;
 
 use crate::error::{Error, Result};
 use crate::header::{parse_header, Kinds, HEADER_TEMPLATE, ZSTD_MAGIC};
+use crate::zbuild::{ZstdBuilder, ZstdDict};
 
 pub struct ReadOptions {
     max_item_size: u64,
+    zstd: ZstdDict<DecoderDictionary<'static>>,
 }
 
 impl Default for ReadOptions {
@@ -13,6 +16,7 @@ impl Default for ReadOptions {
         const GIGABYTE: u64 = 1024 * 1024 * 1024;
         ReadOptions {
             max_item_size: 2 * GIGABYTE,
+            zstd: ZstdDict::default(),
         }
     }
 }
@@ -30,6 +34,7 @@ pub struct StreamExpand<R> {
 pub struct ItemExpand<R> {
     inner: R,
     max_item_size: u64,
+    zstd: ZstdDict<DecoderDictionary<'static>>,
 }
 
 impl<R: Read> Expand for StreamExpand<R> {
@@ -81,7 +86,7 @@ impl<R> Drop for StreamExpandItem<'_, R> {
     }
 }
 
-impl<R: Read> Expand for ItemExpand<R> {
+impl<R: BufRead> Expand for ItemExpand<R> {
     fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>> {
         let mut buf = [0u8; 8];
         self.inner.read_exact(&mut buf)?;
@@ -94,20 +99,20 @@ impl<R: Read> Expand for ItemExpand<R> {
         }
 
         let take = (&mut self.inner).take(len);
-        let decoder = zstd::Decoder::new(take)?;
+        let decoder = self.zstd.decode(take)?;
         Ok(Some(Box::new(decoder)))
     }
 }
 
 impl ReadOptions {
-    pub fn stream<R: BufRead + 'static>(self, mut inner: R) -> Result<Box<dyn Expand>> {
+    pub fn stream<'s, R: BufRead + 's>(self, mut inner: R) -> Result<Box<dyn Expand + 's>> {
         let hints = inner.fill_buf()?;
         assert_eq!(0x28, ZSTD_MAGIC[0]);
         assert_eq!(0x29, HEADER_TEMPLATE[0]);
         match hints[0] {
             0x28 => {
-                let inner = io::BufReader::new(zstd::Decoder::new(inner)?);
-                return self.stream(Box::new(inner) as Box<dyn BufRead>);
+                let inner = io::BufReader::new(self.zstd.decode(inner)?);
+                return self.stream(Box::new(inner) as Box<dyn BufRead + '_>);
             }
             0x29 => (),
             _ => return Err(Error::MagicMissing),
@@ -126,6 +131,7 @@ impl ReadOptions {
             Kinds::ItemCompressed => Box::new(ItemExpand {
                 inner,
                 max_item_size,
+                zstd: self.zstd.clone(),
             }),
         })
     }

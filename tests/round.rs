@@ -55,7 +55,8 @@ fn round_trip_items() -> anyhow::Result<()> {
 
 #[test]
 fn api_misuse() -> anyhow::Result<()> {
-    let mut archiv = WriteOptions::default().stream_compress(Vec::new())?;
+    let archiv = WriteOptions::default().with_level(7);
+    let mut archiv = archiv.stream_compress(Vec::new())?;
     archiv.write_item(b"hello world")?;
     let out = archiv.finish()?;
     let mut archiv = ReadOptions::default().stream(io::Cursor::new(out))?;
