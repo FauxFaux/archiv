@@ -7,5 +7,16 @@ edition = "2021"
 thiserror = "1"
 zstd = "0.12"
 
+# bin
+clap = { version = "4", features = ["cargo", "derive"], optional = true }
+anyhow = { version = "1", optional = true }
+
 [dev-dependencies]
 anyhow = "1"
+
+[features]
+bin = ["anyhow", "clap"]
+
+[[bin]]
+name = "archiv"
+required-features = ["bin"]
