@@ -5,28 +5,35 @@ use crate::error::{Error, Result};
 use crate::header::{footer, header, Kinds, GLOBAL_MARKER_LEN};
 use crate::zbuild::EncoderDict;
 
+/// Entry point for compression (writing)
 #[derive(Default)]
-pub struct WriteOptions<'d> {
+pub struct CompressOptions<'d> {
     zstd: EncoderDict<'d>,
 }
 
-pub trait Encoder<W> {
+/// Trait for writing compressed streams
+pub trait Compress<W> {
+    /// Append an item to the writer
     fn write_item(&mut self, item: &[u8]) -> Result<u64>;
+
+    /// Complete the writer
     fn finish(self) -> Result<W>;
 }
 
-pub struct Plain<'e, W: Write> {
+/// Concrete implementation of the compressed stream writer
+pub struct CompressStream<'e, W: Write> {
     off: u64,
     inner: zstd::Encoder<'e, W>,
 }
 
-pub struct ItemCompress<'d, W> {
+/// Concrete implementation of the compressed item writer
+pub struct CompressItem<'d, W> {
     off: u64,
     inner: W,
     zstd: EncoderDict<'d>,
 }
 
-impl<'e, W: Write> Encoder<W> for Plain<'e, W> {
+impl<'e, W: Write> Compress<W> for CompressStream<'e, W> {
     fn write_item(&mut self, item: &[u8]) -> Result<u64> {
         let len = u64::try_from(item.len()).map_err(|_| Error::LengthOverflow)?;
         self.inner.write_all(&len.to_ne_bytes())?;
@@ -43,7 +50,7 @@ impl<'e, W: Write> Encoder<W> for Plain<'e, W> {
     }
 }
 
-impl<'e, W: Write> Plain<'e, W> {
+impl<'e, W: Write> CompressStream<'e, W> {
     pub fn write_item_vectored(&mut self, item: &[&[u8]]) -> Result<u64> {
         let mut len: u64 = 0;
         for slice in item {
@@ -68,7 +75,7 @@ impl<'e, W: Write> Plain<'e, W> {
     }
 }
 
-impl<'d, W: Write> Encoder<W> for ItemCompress<'d, W> {
+impl<'d, W: Write> Compress<W> for CompressItem<'d, W> {
     fn write_item(&mut self, item: &[u8]) -> Result<u64> {
         let original_len = u64::try_from(item.len()).map_err(|_| Error::LengthOverflow)?;
         let mut buf = Vec::with_capacity(item.len() / 4 + 30);
@@ -97,25 +104,25 @@ impl<'d, W: Write> Encoder<W> for ItemCompress<'d, W> {
     }
 }
 
-impl<'d, W: Write> ItemCompress<'d, W> {
+impl<'d, W: Write> CompressItem<'d, W> {
     pub fn get_mut(&mut self) -> &mut W {
         &mut self.inner
     }
 }
 
-impl<'d> WriteOptions<'d> {
-    pub fn stream_compress<W: Write>(&self, inner: W) -> Result<Plain<W>> {
+impl<'d> CompressOptions<'d> {
+    pub fn stream_compress<W: Write>(&self, inner: W) -> Result<CompressStream<W>> {
         let mut inner = self.zstd.encode(inner)?;
         inner.write_all(&header(Kinds::Plain))?;
-        Ok(Plain {
+        Ok(CompressStream {
             off: GLOBAL_MARKER_LEN,
             inner,
         })
     }
 
-    pub fn item_compress<W: Write>(&self, mut inner: W) -> Result<ItemCompress<'d, W>> {
+    pub fn item_compress<W: Write>(&self, mut inner: W) -> Result<CompressItem<'d, W>> {
         inner.write_all(&header(Kinds::ItemCompressed))?;
-        Ok(ItemCompress {
+        Ok(CompressItem {
             off: GLOBAL_MARKER_LEN,
             inner,
             zstd: self.zstd.clone(),
@@ -123,7 +130,7 @@ impl<'d> WriteOptions<'d> {
     }
 }
 
-impl<'d> WriteOptions<'d> {
+impl<'d> CompressOptions<'d> {
     #[must_use]
     pub fn with_level(mut self, val: i32) -> Self {
         self.zstd = EncoderDict::None(val);

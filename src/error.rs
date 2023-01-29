@@ -3,6 +3,7 @@ use std::io;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Library specific errors we can encounter, typically around underlying or format errors
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("this isn't the right type of file for us")]

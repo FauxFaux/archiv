@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::{fs, io};
 
 use anyhow::{anyhow, Context, Result};
-use archiv::{Encoder, WriteOptions};
+use archiv::{Compress, CompressOptions};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -57,7 +57,7 @@ fn main() -> Result<()> {
 
 fn pack(files: &[PathBuf]) -> Result<()> {
     let stdout = io::stdout().lock();
-    let opts = WriteOptions::default();
+    let opts = CompressOptions::default();
     let mut archiv = opts.stream_compress(stdout)?;
     let mut buf = Vec::with_capacity(4096);
     for file in files {

@@ -1,10 +1,10 @@
 use std::io;
 use std::io::Read;
 
-use archiv::{Encoder, Error, ReadOptions, WriteOptions};
+use archiv::{Compress, CompressOptions, Error, ExpandOptions};
 
 fn test_round_trip<W: AsRef<[u8]> + 'static>(
-    mut archiv: impl Encoder<W>,
+    mut archiv: impl Compress<W>,
     originals: &[&str],
 ) -> anyhow::Result<()> {
     for item in originals {
@@ -13,7 +13,7 @@ fn test_round_trip<W: AsRef<[u8]> + 'static>(
     let file = archiv.finish()?;
 
     let mut items = Vec::with_capacity(originals.len());
-    let mut archiv = ReadOptions::default().stream(io::Cursor::new(file))?;
+    let mut archiv = ExpandOptions::default().stream(io::Cursor::new(file))?;
 
     while let Some(mut v) = archiv.next_item()? {
         let mut buf = String::with_capacity(16);
@@ -28,38 +28,38 @@ fn test_round_trip<W: AsRef<[u8]> + 'static>(
 #[test]
 fn round_trip_stream() -> anyhow::Result<()> {
     test_round_trip(
-        WriteOptions::default().stream_compress(Vec::new())?,
+        CompressOptions::default().stream_compress(Vec::new())?,
         &["hello world", "bruises"],
     )?;
     test_round_trip(
-        WriteOptions::default().stream_compress(Vec::new())?,
+        CompressOptions::default().stream_compress(Vec::new())?,
         &["hello world"],
     )?;
-    test_round_trip(WriteOptions::default().stream_compress(Vec::new())?, &[])?;
+    test_round_trip(CompressOptions::default().stream_compress(Vec::new())?, &[])?;
     Ok(())
 }
 
 #[test]
 fn round_trip_items() -> anyhow::Result<()> {
     test_round_trip(
-        WriteOptions::default().item_compress(Vec::new())?,
+        CompressOptions::default().item_compress(Vec::new())?,
         &["hello world", "bruises"],
     )?;
     test_round_trip(
-        WriteOptions::default().item_compress(Vec::new())?,
+        CompressOptions::default().item_compress(Vec::new())?,
         &["hello world"],
     )?;
-    test_round_trip(WriteOptions::default().item_compress(Vec::new())?, &[])?;
+    test_round_trip(CompressOptions::default().item_compress(Vec::new())?, &[])?;
     Ok(())
 }
 
 #[test]
 fn api_misuse() -> anyhow::Result<()> {
-    let archiv = WriteOptions::default().with_level(7);
+    let archiv = CompressOptions::default().with_level(7);
     let mut archiv = archiv.stream_compress(Vec::new())?;
     archiv.write_item(b"hello world")?;
     let out = archiv.finish()?;
-    let mut archiv = ReadOptions::default().stream(io::Cursor::new(out))?;
+    let mut archiv = ExpandOptions::default().stream(io::Cursor::new(out))?;
     let mut item = archiv.next_item()?.expect(">1 items present");
     assert_eq!(1, item.read(&mut [0u8])?);
     // this is illegal, it hasn't been fully read:

@@ -6,38 +6,42 @@ use crate::error::{Error, Result};
 use crate::header::{parse_header, Kinds, HEADER_TEMPLATE, ZSTD_MAGIC};
 use crate::zbuild::DecoderDict;
 
-pub struct ReadOptions<'d> {
+/// Entry point for expansion (reading)
+pub struct ExpandOptions<'d> {
     max_item_size: u64,
     zstd: DecoderDict<'d>,
 }
 
-impl Default for ReadOptions<'static> {
+impl Default for ExpandOptions<'static> {
     fn default() -> Self {
         const GIGABYTE: u64 = 1024 * 1024 * 1024;
-        ReadOptions {
+        ExpandOptions {
             max_item_size: 2 * GIGABYTE,
             zstd: DecoderDict::default(),
         }
     }
 }
 
+/// Trait for reading from compressed streams
 pub trait Expand {
     fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>>;
 }
 
-pub struct StreamExpand<R> {
+/// Concrete implementation of the compressed stream reader
+pub struct ExpandStream<R> {
     inner: R,
     max_item_size: u64,
     poisoned: bool,
 }
 
-pub struct ItemExpand<'d, R> {
+/// Concrete implementation of the compressed item reader
+pub struct ExpandItem<'d, R> {
     inner: R,
     max_item_size: u64,
     zstd: DecoderDict<'d>,
 }
 
-impl<R: Read> Expand for StreamExpand<R> {
+impl<R: Read> Expand for ExpandStream<R> {
     fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>> {
         // this could be a panic, we don't panic in drop to assist with unwinding
         if self.poisoned {
@@ -53,7 +57,7 @@ impl<R: Read> Expand for StreamExpand<R> {
             return Err(Error::InvalidItem);
         }
 
-        Ok(Some(Box::new(StreamExpandItem {
+        Ok(Some(Box::new(ExpandStreamItem {
             inner: self,
             limit: len,
         })))
@@ -61,12 +65,12 @@ impl<R: Read> Expand for StreamExpand<R> {
 }
 
 // Take<> but with error handling
-struct StreamExpandItem<'i, R> {
-    inner: &'i mut StreamExpand<R>,
+struct ExpandStreamItem<'i, R> {
+    inner: &'i mut ExpandStream<R>,
     limit: u64,
 }
 
-impl<R: Read> Read for StreamExpandItem<'_, R> {
+impl<R: Read> Read for ExpandStreamItem<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.limit == 0 {
             return Ok(0);
@@ -78,7 +82,7 @@ impl<R: Read> Read for StreamExpandItem<'_, R> {
     }
 }
 
-impl<R> Drop for StreamExpandItem<'_, R> {
+impl<R> Drop for ExpandStreamItem<'_, R> {
     fn drop(&mut self) {
         if self.limit != 0 {
             self.inner.poisoned = true;
@@ -86,7 +90,7 @@ impl<R> Drop for StreamExpandItem<'_, R> {
     }
 }
 
-impl<'d, R: BufRead> Expand for ItemExpand<'d, R> {
+impl<'d, R: BufRead> Expand for ExpandItem<'d, R> {
     fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>> {
         let mut buf = [0u8; 8];
         self.inner.read_exact(&mut buf)?;
@@ -104,7 +108,7 @@ impl<'d, R: BufRead> Expand for ItemExpand<'d, R> {
     }
 }
 
-impl<'d> ReadOptions<'d> {
+impl<'d> ExpandOptions<'d> {
     pub fn stream<R: BufRead + 'd>(&self, mut inner: R) -> Result<Box<dyn Expand + 'd>> {
         let hints = inner.fill_buf()?;
         assert_eq!(0x28, ZSTD_MAGIC[0]);
@@ -123,12 +127,12 @@ impl<'d> ReadOptions<'d> {
         let max_item_size = self.max_item_size;
         let kind = parse_header(&buf)?;
         Ok(match kind {
-            Kinds::Plain => Box::new(StreamExpand {
+            Kinds::Plain => Box::new(ExpandStream {
                 inner,
                 max_item_size,
                 poisoned: false,
             }),
-            Kinds::ItemCompressed => Box::new(ItemExpand {
+            Kinds::ItemCompressed => Box::new(ExpandItem {
                 inner,
                 max_item_size,
                 zstd: self.zstd.clone(),
@@ -137,6 +141,7 @@ impl<'d> ReadOptions<'d> {
     }
 }
 
+#[cfg(never)]
 fn alloc(len: u64) -> Result<Vec<u8>> {
     let len = usize::try_from(len).map_err(|_| Error::InvalidItem)?;
 
@@ -148,7 +153,7 @@ fn alloc(len: u64) -> Result<Vec<u8>> {
     Ok(buf)
 }
 
-impl<'d> ReadOptions<'d> {
+impl<'d> ExpandOptions<'d> {
     #[must_use]
     pub fn without_dict(mut self) -> Self {
         self.zstd = DecoderDict::None;

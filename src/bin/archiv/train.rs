@@ -3,14 +3,14 @@ use std::path::PathBuf;
 use std::{fs, io};
 
 use anyhow::Result;
-use archiv::ReadOptions;
+use archiv::ExpandOptions;
 
 pub fn train(sources: &[PathBuf], limit: usize) -> Result<Vec<u8>> {
     let mut samples = Vec::with_capacity(limit);
     let mut i = 0usize;
     eprintln!("Loading samples...");
     for source in sources {
-        let opts = ReadOptions::default();
+        let opts = ExpandOptions::default();
         let mut v = opts.stream(io::BufReader::new(fs::File::open(source)?))?;
         // TODO: skip decompression on item-compressed archives, where possible
         while let Some(mut item) = v.next_item()? {
