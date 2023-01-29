@@ -1,7 +1,13 @@
 [package]
-name = "archiv"
-version = "0.1.0"
+authors = ["Chris West (Faux) <git@goeswhere.com>"]
+categories = ["encoding"]
+description = "Read and write compressed, length-prefixed streams or file(s)"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+name = "archiv"
+readme = "README.md"
+repository = "https://github.com/FauxFaux/archiv"
+version = "0.1.0"
 
 [dependencies]
 thiserror = "1"
