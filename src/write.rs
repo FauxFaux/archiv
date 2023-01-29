@@ -18,6 +18,9 @@ pub trait Compress<W> {
 
     /// Complete the writer
     fn finish(self) -> Result<W>;
+
+    /// Make a moderate amount of effort to ensure there will be no IO errors in the future.
+    fn flush(&mut self) -> Result<()>;
 }
 
 /// Concrete implementation of the compressed stream writer
@@ -47,6 +50,11 @@ impl<'e, W: Write> Compress<W> for CompressStream<'e, W> {
         let mut w = self.inner.finish()?;
         w.flush()?;
         Ok(w)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()?;
+        Ok(())
     }
 }
 
@@ -101,6 +109,11 @@ impl<'d, W: Write> Compress<W> for CompressItem<'d, W> {
         w.write_all(&footer())?;
         w.flush()?;
         Ok(w)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()?;
+        Ok(())
     }
 }
 
