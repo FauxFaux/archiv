@@ -18,7 +18,7 @@ pub enum DecoderDict<'d> {
 }
 
 impl<'d> EncoderDict<'d> {
-    pub fn encode<W: Write>(&self, inner: W) -> Result<zstd::Encoder<W>> {
+    pub fn encode<'e: 'd, W: Write>(&self, inner: W) -> Result<zstd::Encoder<'e, W>> {
         Ok(match self {
             EncoderDict::None(level) => zstd::Encoder::new(inner, *level)?,
             EncoderDict::Dict(p) => zstd::Encoder::with_prepared_dictionary(inner, p)?,

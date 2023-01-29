@@ -111,7 +111,7 @@ impl<'d, W: Write> CompressItem<'d, W> {
 }
 
 impl<'d> CompressOptions<'d> {
-    pub fn stream_compress<W: Write>(&self, inner: W) -> Result<CompressStream<W>> {
+    pub fn stream_compress<W: Write>(&self, inner: W) -> Result<CompressStream<'d, W>> {
         let mut inner = self.zstd.encode(inner)?;
         inner.write_all(&header(Kinds::Plain))?;
         Ok(CompressStream {

@@ -67,3 +67,13 @@ fn api_misuse() -> anyhow::Result<()> {
     assert!(matches!(archiv.next_item(), Err(Error::ApiMisuse)));
     Ok(())
 }
+
+#[test]
+fn compress_opts_lifetime() -> anyhow::Result<()> {
+    let opts = CompressOptions::default().with_level(7);
+    let mut archiv = opts.stream_compress(Vec::new())?;
+    drop(opts);
+    archiv.write_item(b"hello world")?;
+    archiv.finish()?;
+    Ok(())
+}
