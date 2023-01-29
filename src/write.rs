@@ -36,7 +36,7 @@ pub struct CompressItem<'d, W> {
 impl<'e, W: Write> Compress<W> for CompressStream<'e, W> {
     fn write_item(&mut self, item: &[u8]) -> Result<u64> {
         let len = u64::try_from(item.len()).map_err(|_| Error::LengthOverflow)?;
-        self.inner.write_all(&len.to_ne_bytes())?;
+        self.inner.write_all(&len.to_le_bytes())?;
         self.inner.write_all(item)?;
         self.off = self.off.checked_add(len).ok_or(Error::LengthOverflow)?;
         Ok(self.off)
@@ -58,7 +58,7 @@ impl<'e, W: Write> CompressStream<'e, W> {
                 .checked_add(u64::try_from(slice.len()).map_err(|_| Error::LengthOverflow)?)
                 .ok_or(Error::LengthOverflow)?;
         }
-        self.inner.write_all(&len.to_ne_bytes())?;
+        self.inner.write_all(&len.to_le_bytes())?;
         for slice in item {
             self.inner.write_all(slice)?;
         }
@@ -86,7 +86,7 @@ impl<'d, W: Write> Compress<W> for CompressItem<'d, W> {
         writer.finish()?;
 
         let new_len = u64::try_from(buf.len()).map_err(|_| Error::LengthOverflow)?;
-        self.inner.write_all(&new_len.to_ne_bytes())?;
+        self.inner.write_all(&new_len.to_le_bytes())?;
         self.inner.write_all(&buf)?;
         let start = self.off;
         self.off = self

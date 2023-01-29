@@ -3,8 +3,12 @@ use crate::error::{Error, Result};
 //                          (all other values reserved)
 //                                Kinds enum   ----v
 pub const HEADER_TEMPLATE: [u8; 8] = *b"\x29\xb6arc\0\0\0";
-const FOOTER_TEMPLATE: [u8; 8] = u64::to_ne_bytes(0xffff_fff0);
+const FOOTER_TEMPLATE: [u8; 8] = u64::to_le_bytes(0xffff_ffff_ffff_fff0);
 pub const GLOBAL_MARKER_LEN: u64 = 8;
+
+// 2^63.9 bytes, over 17 million terabytes.
+// (obviously this is ridiculous)
+pub const MAX_ITEM_SIZE: u64 = 0xf000_0000_0000_0000;
 
 pub const ZSTD_MAGIC: [u8; 4] = *b"\x28\xb5\x2f\xfd";
 

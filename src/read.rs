@@ -3,7 +3,7 @@ use std::io::{BufRead, Read};
 use zstd::dict::DecoderDictionary;
 
 use crate::error::{Error, Result};
-use crate::header::{parse_header, Kinds, HEADER_TEMPLATE, ZSTD_MAGIC};
+use crate::header::{parse_header, Kinds, HEADER_TEMPLATE, ZSTD_MAGIC, MAX_ITEM_SIZE};
 use crate::zbuild::DecoderDict;
 
 /// Entry point for expansion (reading)
@@ -49,8 +49,9 @@ impl<R: Read> Expand for ExpandStream<R> {
         }
         let mut buf = [0u8; 8];
         self.inner.read_exact(&mut buf)?;
-        let len = u64::from_ne_bytes(buf);
-        if len >= 0xffff_fff0 {
+        let len = u64::from_le_bytes(buf);
+        // TODO: actually check this is a footer and not just corrupt.
+        if len >= MAX_ITEM_SIZE {
             return Ok(None);
         }
         if len > self.max_item_size {
@@ -94,8 +95,9 @@ impl<'d, R: BufRead> Expand for ExpandItem<'d, R> {
     fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>> {
         let mut buf = [0u8; 8];
         self.inner.read_exact(&mut buf)?;
-        let len = u64::from_ne_bytes(buf);
-        if len >= 0xffff_fff0 {
+        let len = u64::from_le_bytes(buf);
+        // TODO: actually check this is a footer and not just corrupt.
+        if len >= MAX_ITEM_SIZE {
             return Ok(None);
         }
         if len > self.max_item_size {
