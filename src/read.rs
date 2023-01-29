@@ -1,9 +1,10 @@
 use std::io;
 use std::io::{BufRead, Read};
+use zstd::dict::DecoderDictionary;
 
 use crate::error::{Error, Result};
 use crate::header::{parse_header, Kinds, HEADER_TEMPLATE, ZSTD_MAGIC};
-use crate::zbuild::{DecoderDict};
+use crate::zbuild::DecoderDict;
 
 pub struct ReadOptions<'d> {
     max_item_size: u64,
@@ -145,4 +146,18 @@ fn alloc(len: u64) -> Result<Vec<u8>> {
         buf.push(0)
     }
     Ok(buf)
+}
+
+impl<'d> ReadOptions<'d> {
+    #[must_use]
+    pub fn without_dict(mut self) -> Self {
+        self.zstd = DecoderDict::None;
+        self
+    }
+
+    #[must_use]
+    pub fn with_dict(mut self, dict: &'d DecoderDictionary<'static>) -> Self {
+        self.zstd = DecoderDict::Dict(dict);
+        self
+    }
 }

@@ -7,14 +7,14 @@ use crate::error::Result;
 #[derive(Clone)]
 pub enum EncoderDict<'d> {
     None(i32),
-    Dict(&'d EncoderDictionary<'static>)
+    Dict(&'d EncoderDictionary<'static>),
 }
 
 #[derive(Clone, Default)]
 pub enum DecoderDict<'d> {
     #[default]
     None,
-    Dict(&'d DecoderDictionary<'static>)
+    Dict(&'d DecoderDictionary<'static>),
 }
 
 impl<'d> EncoderDict<'d> {
