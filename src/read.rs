@@ -1,14 +1,13 @@
 use std::io;
 use std::io::{BufRead, Read};
-use zstd::dict::DecoderDictionary;
 
 use crate::error::{Error, Result};
 use crate::header::{parse_header, Kinds, HEADER_TEMPLATE, ZSTD_MAGIC};
-use crate::zbuild::ZstdDict;
+use crate::zbuild::{DecoderDict};
 
 pub struct ReadOptions<'d> {
     max_item_size: u64,
-    zstd: ZstdDict<'d, DecoderDictionary<'static>>,
+    zstd: DecoderDict<'d>,
 }
 
 impl Default for ReadOptions<'static> {
@@ -16,7 +15,7 @@ impl Default for ReadOptions<'static> {
         const GIGABYTE: u64 = 1024 * 1024 * 1024;
         ReadOptions {
             max_item_size: 2 * GIGABYTE,
-            zstd: ZstdDict::default(),
+            zstd: DecoderDict::default(),
         }
     }
 }
@@ -34,7 +33,7 @@ pub struct StreamExpand<R> {
 pub struct ItemExpand<'d, R> {
     inner: R,
     max_item_size: u64,
-    zstd: ZstdDict<'d, DecoderDictionary<'static>>,
+    zstd: DecoderDict<'d>,
 }
 
 impl<R: Read> Expand for StreamExpand<R> {

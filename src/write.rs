@@ -3,11 +3,11 @@ use zstd::dict::EncoderDictionary;
 
 use crate::error::{Error, Result};
 use crate::header::{footer, header, Kinds, GLOBAL_MARKER_LEN};
-use crate::zbuild::{ZstdBuilder, ZstdDict};
+use crate::zbuild::EncoderDict;
 
 #[derive(Default)]
 pub struct WriteOptions<'d> {
-    zstd: ZstdBuilder<'d>,
+    zstd: EncoderDict<'d>,
 }
 
 pub trait Encoder<W> {
@@ -23,7 +23,7 @@ pub struct Plain<'e, W: Write> {
 pub struct ItemCompress<'d, W> {
     off: u64,
     inner: W,
-    zstd: ZstdBuilder<'d>,
+    zstd: EncoderDict<'d>,
 }
 
 impl<'e, W: Write> Encoder<W> for Plain<'e, W> {
@@ -126,19 +126,13 @@ impl<'d> WriteOptions<'d> {
 impl<'d> WriteOptions<'d> {
     #[must_use]
     pub fn with_level(mut self, val: i32) -> Self {
-        self.zstd.level = val;
-        self
-    }
-
-    #[must_use]
-    pub fn without_dictionary(mut self) -> Self {
-        self.zstd.dict = ZstdDict(None);
+        self.zstd = EncoderDict::None(val);
         self
     }
 
     #[must_use]
     pub fn with_dict(mut self, dict: &'d EncoderDictionary<'static>) -> Self {
-        self.zstd.dict = ZstdDict(Some(dict));
+        self.zstd = EncoderDict::Dict(dict);
         self
     }
 }

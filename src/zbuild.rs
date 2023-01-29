@@ -4,49 +4,39 @@ use zstd::dict::{DecoderDictionary, EncoderDictionary};
 
 use crate::error::Result;
 
-pub struct ZstdDict<'d, D>(pub Option<&'d D>);
-
-impl<'d, D> Clone for ZstdDict<'d, D> {
-    fn clone(&self) -> Self {
-        ZstdDict(self.0.clone())
-    }
-}
-
-impl Default for ZstdDict<'static, DecoderDictionary<'static>> {
-    fn default() -> Self {
-        Self(None)
-    }
-}
-
 #[derive(Clone)]
-pub struct ZstdBuilder<'d> {
-    pub level: i32,
-    pub dict: ZstdDict<'d, EncoderDictionary<'static>>,
+pub enum EncoderDict<'d> {
+    None(i32),
+    Dict(&'d EncoderDictionary<'static>)
 }
 
-impl Default for ZstdBuilder<'static> {
-    fn default() -> Self {
-        Self {
-            level: 3,
-            dict: ZstdDict(None),
-        }
-    }
+#[derive(Clone, Default)]
+pub enum DecoderDict<'d> {
+    #[default]
+    None,
+    Dict(&'d DecoderDictionary<'static>)
 }
 
-impl<'d> ZstdBuilder<'d> {
+impl<'d> EncoderDict<'d> {
     pub fn encode<W: Write>(&self, inner: W) -> Result<zstd::Encoder<W>> {
-        Ok(match self.dict.0 {
-            None => zstd::Encoder::new(inner, self.level)?,
-            Some(p) => zstd::Encoder::with_prepared_dictionary(inner, p)?,
+        Ok(match self {
+            EncoderDict::None(level) => zstd::Encoder::new(inner, *level)?,
+            EncoderDict::Dict(p) => zstd::Encoder::with_prepared_dictionary(inner, p)?,
         })
     }
 }
 
-impl<'d> ZstdDict<'d, DecoderDictionary<'static>> {
+impl<'d> DecoderDict<'d> {
     pub fn decode<R: BufRead>(&self, inner: R) -> Result<zstd::Decoder<'d, R>> {
-        Ok(match self.0 {
-            None => zstd::Decoder::with_buffer(inner)?,
-            Some(p) => zstd::Decoder::with_prepared_dictionary(inner, p)?,
+        Ok(match self {
+            DecoderDict::None => zstd::Decoder::with_buffer(inner)?,
+            DecoderDict::Dict(p) => zstd::Decoder::with_prepared_dictionary(inner, p)?,
         })
+    }
+}
+
+impl Default for EncoderDict<'_> {
+    fn default() -> Self {
+        EncoderDict::None(0)
     }
 }
