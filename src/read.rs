@@ -4,14 +4,14 @@ use zstd::dict::DecoderDictionary;
 
 use crate::error::{Error, Result};
 use crate::header::{parse_header, Kinds, HEADER_TEMPLATE, ZSTD_MAGIC};
-use crate::zbuild::{ZstdBuilder, ZstdDict};
+use crate::zbuild::ZstdDict;
 
-pub struct ReadOptions {
+pub struct ReadOptions<'d> {
     max_item_size: u64,
-    zstd: ZstdDict<DecoderDictionary<'static>>,
+    zstd: ZstdDict<'d, DecoderDictionary<'static>>,
 }
 
-impl Default for ReadOptions {
+impl Default for ReadOptions<'static> {
     fn default() -> Self {
         const GIGABYTE: u64 = 1024 * 1024 * 1024;
         ReadOptions {
@@ -31,10 +31,10 @@ pub struct StreamExpand<R> {
     poisoned: bool,
 }
 
-pub struct ItemExpand<R> {
+pub struct ItemExpand<'d, R> {
     inner: R,
     max_item_size: u64,
-    zstd: ZstdDict<DecoderDictionary<'static>>,
+    zstd: ZstdDict<'d, DecoderDictionary<'static>>,
 }
 
 impl<R: Read> Expand for StreamExpand<R> {
@@ -86,7 +86,7 @@ impl<R> Drop for StreamExpandItem<'_, R> {
     }
 }
 
-impl<R: BufRead> Expand for ItemExpand<R> {
+impl<'d, R: BufRead> Expand for ItemExpand<'d, R> {
     fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>> {
         let mut buf = [0u8; 8];
         self.inner.read_exact(&mut buf)?;
@@ -104,8 +104,8 @@ impl<R: BufRead> Expand for ItemExpand<R> {
     }
 }
 
-impl ReadOptions {
-    pub fn stream<'s, R: BufRead + 's>(self, mut inner: R) -> Result<Box<dyn Expand + 's>> {
+impl<'d> ReadOptions<'d> {
+    pub fn stream<R: BufRead + 'd>(&self, mut inner: R) -> Result<Box<dyn Expand + 'd>> {
         let hints = inner.fill_buf()?;
         assert_eq!(0x28, ZSTD_MAGIC[0]);
         assert_eq!(0x29, HEADER_TEMPLATE[0]);

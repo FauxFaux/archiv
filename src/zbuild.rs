@@ -1,47 +1,52 @@
-use std::io::{BufRead, Read, Write};
+use std::io::{BufRead, Write};
 
 use zstd::dict::{DecoderDictionary, EncoderDictionary};
 
 use crate::error::Result;
 
-#[derive(Default, Clone)]
-pub enum ZstdDict<P> {
-    #[default]
-    None,
-    Copy(Vec<u8>),
-    Prepared(P),
+pub struct ZstdDict<'d, D>(pub Option<&'d D>);
+
+impl<'d, D> Clone for ZstdDict<'d, D> {
+    fn clone(&self) -> Self {
+        ZstdDict(self.0.clone())
+    }
 }
 
-pub struct ZstdBuilder {
+impl Default for ZstdDict<'static, DecoderDictionary<'static>> {
+    fn default() -> Self {
+        Self(None)
+    }
+}
+
+#[derive(Clone)]
+pub struct ZstdBuilder<'d> {
     pub level: i32,
-    pub dict: ZstdDict<EncoderDictionary<'static>>,
+    pub dict: ZstdDict<'d, EncoderDictionary<'static>>,
 }
 
-impl Default for ZstdBuilder {
+impl Default for ZstdBuilder<'static> {
     fn default() -> Self {
         Self {
             level: 3,
-            dict: ZstdDict::None,
+            dict: ZstdDict(None),
         }
     }
 }
 
-impl ZstdBuilder {
+impl<'d> ZstdBuilder<'d> {
     pub fn encode<W: Write>(&self, inner: W) -> Result<zstd::Encoder<W>> {
-        Ok(match &self.dict {
-            ZstdDict::None => zstd::Encoder::new(inner, self.level)?,
-            ZstdDict::Copy(v) => zstd::Encoder::with_dictionary(inner, self.level, v)?,
-            ZstdDict::Prepared(p) => zstd::Encoder::with_prepared_dictionary(inner, p)?,
+        Ok(match self.dict.0 {
+            None => zstd::Encoder::new(inner, self.level)?,
+            Some(p) => zstd::Encoder::with_prepared_dictionary(inner, p)?,
         })
     }
 }
 
-impl ZstdDict<DecoderDictionary<'static>> {
-    pub fn decode<R: BufRead>(&self, inner: R) -> Result<zstd::Decoder<R>> {
-        Ok(match self {
-            ZstdDict::None => zstd::Decoder::with_buffer(inner)?,
-            ZstdDict::Copy(v) => zstd::Decoder::with_dictionary(inner, v)?,
-            ZstdDict::Prepared(p) => zstd::Decoder::with_prepared_dictionary(inner, p)?,
+impl<'d> ZstdDict<'d, DecoderDictionary<'static>> {
+    pub fn decode<R: BufRead>(&self, inner: R) -> Result<zstd::Decoder<'d, R>> {
+        Ok(match self.0 {
+            None => zstd::Decoder::with_buffer(inner)?,
+            Some(p) => zstd::Decoder::with_prepared_dictionary(inner, p)?,
         })
     }
 }

@@ -6,8 +6,8 @@ use crate::header::{footer, header, Kinds, GLOBAL_MARKER_LEN};
 use crate::zbuild::{ZstdBuilder, ZstdDict};
 
 #[derive(Default)]
-pub struct WriteOptions {
-    zstd: ZstdBuilder,
+pub struct WriteOptions<'d> {
+    zstd: ZstdBuilder<'d>,
 }
 
 pub trait Encoder<W> {
@@ -20,10 +20,10 @@ pub struct Plain<'e, W: Write> {
     inner: zstd::Encoder<'e, W>,
 }
 
-pub struct ItemCompress<W> {
+pub struct ItemCompress<'d, W> {
     off: u64,
     inner: W,
-    zstd: ZstdBuilder,
+    zstd: ZstdBuilder<'d>,
 }
 
 impl<'e, W: Write> Encoder<W> for Plain<'e, W> {
@@ -68,7 +68,7 @@ impl<'e, W: Write> Plain<'e, W> {
     }
 }
 
-impl<W: Write> Encoder<W> for ItemCompress<W> {
+impl<'d, W: Write> Encoder<W> for ItemCompress<'d, W> {
     fn write_item(&mut self, item: &[u8]) -> Result<u64> {
         let original_len = u64::try_from(item.len()).map_err(|_| Error::LengthOverflow)?;
         let mut buf = Vec::with_capacity(item.len() / 4 + 30);
@@ -97,13 +97,13 @@ impl<W: Write> Encoder<W> for ItemCompress<W> {
     }
 }
 
-impl<W: Write> ItemCompress<W> {
+impl<'d, W: Write> ItemCompress<'d, W> {
     pub fn get_mut(&mut self) -> &mut W {
         &mut self.inner
     }
 }
 
-impl WriteOptions {
+impl<'d> WriteOptions<'d> {
     pub fn stream_compress<W: Write>(&self, inner: W) -> Result<Plain<W>> {
         let mut inner = self.zstd.encode(inner)?;
         inner.write_all(&header(Kinds::Plain))?;
@@ -113,17 +113,17 @@ impl WriteOptions {
         })
     }
 
-    pub fn item_compress<W: Write>(self, mut inner: W) -> Result<ItemCompress<W>> {
+    pub fn item_compress<W: Write>(&self, mut inner: W) -> Result<ItemCompress<'d, W>> {
         inner.write_all(&header(Kinds::ItemCompressed))?;
         Ok(ItemCompress {
             off: GLOBAL_MARKER_LEN,
             inner,
-            zstd: self.zstd,
+            zstd: self.zstd.clone(),
         })
     }
 }
 
-impl WriteOptions {
+impl<'d> WriteOptions<'d> {
     #[must_use]
     pub fn with_level(mut self, val: i32) -> Self {
         self.zstd.level = val;
@@ -132,19 +132,13 @@ impl WriteOptions {
 
     #[must_use]
     pub fn without_dictionary(mut self) -> Self {
-        self.zstd.dict = ZstdDict::None;
+        self.zstd.dict = ZstdDict(None);
         self
     }
 
     #[must_use]
-    pub fn with_dictionary(mut self, dict: Vec<u8>) -> Self {
-        self.zstd.dict = ZstdDict::Copy(dict);
-        self
-    }
-
-    #[must_use]
-    pub fn with_prepared_dict(mut self, dict: EncoderDictionary<'static>) -> Self {
-        self.zstd.dict = ZstdDict::Prepared(dict);
+    pub fn with_dict(mut self, dict: &'d EncoderDictionary<'static>) -> Self {
+        self.zstd.dict = ZstdDict(Some(dict));
         self
     }
 }
