@@ -113,6 +113,9 @@ impl<'d, R: BufRead> Expand for ExpandItem<'d, R> {
 impl<'d> ExpandOptions<'d> {
     pub fn stream<R: BufRead + 'd>(&self, mut inner: R) -> Result<Box<dyn Expand + 'd>> {
         let hints = inner.fill_buf()?;
+        if hints.is_empty() {
+            return Err(Error::MagicMissing);
+        }
         assert_eq!(0x28, ZSTD_MAGIC[0]);
         assert_eq!(0x29, HEADER_TEMPLATE[0]);
         match hints[0] {
