@@ -3,7 +3,7 @@ use std::io::{BufRead, Read};
 use zstd::dict::DecoderDictionary;
 
 use crate::error::{Error, Result};
-use crate::header::{parse_header, Kinds, HEADER_TEMPLATE, ZSTD_MAGIC, MAX_ITEM_SIZE};
+use crate::header::{parse_header, Kinds, HEADER_TEMPLATE, MAX_ITEM_SIZE, ZSTD_MAGIC};
 use crate::zbuild::DecoderDict;
 
 /// Entry point for expansion (reading)
