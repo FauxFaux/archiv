@@ -37,3 +37,4 @@ pub use read::*;
 pub use write::*;
 
 pub use zstd::dict::{DecoderDictionary, EncoderDictionary};
+pub use zstd::stream::read::Decoder as ZDecoder;

@@ -1,10 +1,11 @@
 use std::io;
-use std::io::{BufRead, Read};
+use std::io::{BufRead, BufReader, Read};
 use zstd::dict::DecoderDictionary;
 
 use crate::error::{Error, Result};
 use crate::header::{parse_header, Kinds, HEADER_TEMPLATE, MAX_ITEM_SIZE, ZSTD_MAGIC};
 use crate::zbuild::DecoderDict;
+use crate::ZDecoder;
 
 /// Entry point for expansion (reading)
 pub struct ExpandOptions<'d> {
@@ -24,7 +25,13 @@ impl Default for ExpandOptions<'static> {
 
 /// Trait for reading from compressed streams
 pub trait Expand {
-    fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>>;
+    fn next_item(&mut self) -> Result<Option<Box<dyn Item + '_>>>;
+}
+
+pub trait Item: Read {
+    fn size_hint(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// Concrete implementation of the compressed stream reader
@@ -42,7 +49,7 @@ pub struct ExpandItem<'d, R> {
 }
 
 impl<R: Read> Expand for ExpandStream<R> {
-    fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>> {
+    fn next_item(&mut self) -> Result<Option<Box<dyn Item + '_>>> {
         // this could be a panic, we don't panic in drop to assist with unwinding
         if self.poisoned {
             return Err(Error::ApiMisuse);
@@ -65,10 +72,26 @@ impl<R: Read> Expand for ExpandStream<R> {
     }
 }
 
+impl<R> ExpandStream<R> {
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.inner
+    }
+
+    pub fn get_ref(&self) -> &R {
+        &self.inner
+    }
+}
+
 // Take<> but with error handling
 struct ExpandStreamItem<'i, R> {
     inner: &'i mut ExpandStream<R>,
     limit: u64,
+}
+
+impl<R: Read> Item for ExpandStreamItem<'_, R> {
+    fn size_hint(&self) -> Option<usize> {
+        usize::try_from(self.limit).ok()
+    }
 }
 
 impl<R: Read> Read for ExpandStreamItem<'_, R> {
@@ -91,8 +114,10 @@ impl<R> Drop for ExpandStreamItem<'_, R> {
     }
 }
 
+impl<R: BufRead> Item for ZDecoder<'_, R> {}
+
 impl<'d, R: BufRead> Expand for ExpandItem<'d, R> {
-    fn next_item(&mut self) -> Result<Option<Box<dyn Read + '_>>> {
+    fn next_item(&mut self) -> Result<Option<Box<dyn Item + '_>>> {
         let mut buf = [0u8; 8];
         self.inner.read_exact(&mut buf)?;
         let len = u64::from_le_bytes(buf);
@@ -143,6 +168,36 @@ impl<'d> ExpandOptions<'d> {
                 zstd: self.zstd.clone(),
             }),
         })
+    }
+
+    /// open a stream that is known to be compressed, without returning traits
+    pub fn stream_explicit<R: BufRead + 'd>(
+        &self,
+        mut inner: R,
+    ) -> Result<ExpandStream<BufReader<ZDecoder<'d, R>>>> {
+        let hints = inner.fill_buf()?;
+        if hints.is_empty() {
+            return Err(Error::MagicMissing);
+        }
+        assert_eq!(0x28, ZSTD_MAGIC[0]);
+        assert_eq!(0x29, HEADER_TEMPLATE[0]);
+        let mut inner = match hints[0] {
+            0x28 => io::BufReader::new(self.zstd.decode(inner)?),
+            _ => return Err(Error::MagicMissing),
+        };
+
+        let mut buf = [0u8; 8];
+        inner.read_exact(&mut buf)?;
+        let max_item_size = self.max_item_size;
+        let kind = parse_header(&buf)?;
+        match kind {
+            Kinds::Plain => Ok(ExpandStream {
+                inner,
+                max_item_size,
+                poisoned: false,
+            }),
+            _ => Err(Error::MagicMissing)?,
+        }
     }
 }
 
