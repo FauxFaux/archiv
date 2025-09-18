@@ -201,18 +201,6 @@ impl<'d> ExpandOptions<'d> {
     }
 }
 
-#[cfg(never)]
-fn alloc(len: u64) -> Result<Vec<u8>> {
-    let len = usize::try_from(len).map_err(|_| Error::InvalidItem)?;
-
-    let mut buf = Vec::new();
-    buf.try_reserve_exact(len)?;
-    for _ in 0..len {
-        buf.push(0)
-    }
-    Ok(buf)
-}
-
 impl<'d> ExpandOptions<'d> {
     #[must_use]
     pub fn without_dict(mut self) -> Self {
