@@ -2,7 +2,7 @@
 authors = ["Chris West (Faux) <git@goeswhere.com>"]
 categories = ["encoding"]
 description = "Read and write compressed, length-prefixed streams or file(s)"
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 name = "archiv"
 readme = "README.md"
